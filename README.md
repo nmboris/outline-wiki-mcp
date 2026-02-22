@@ -17,8 +17,13 @@ interface.
 - **Draft Access** - Work with unpublished drafts
 - **Markdown Export** - Export documents as clean markdown
 - **MCP Resources** - Browse collections and documents via resource URIs
+- **HTTP SSE Transport** - Access via HTTP with Server-Sent Events for Mistral.ai and other platforms
 
 ## Setup
+
+### Standard Setup (stdio)
+
+For use with Claude Desktop or other MCP clients:
 
 ```json
 {
@@ -33,6 +38,69 @@ interface.
     }
   }
 }
+```
+
+### HTTP SSE Setup (for Mistral.ai and others)
+
+For use with Mistral.ai connectors or other HTTP-based MCP clients:
+
+1. **Build the project:**
+
+```bash
+bun install
+bun run build
+```
+
+2. **Start the HTTP server:**
+
+```bash
+export OUTLINE_BASE_URL="https://your-instance.getoutline.com"
+export OUTLINE_API_KEY="ol_api_xxx"
+export MCP_TRANSPORT="http"
+export MCP_BEARER_TOKEN="your-secret-token"
+export MCP_PORT="3000"  # Optional, defaults to 3000
+export MCP_PATH="/mcp"  # Optional, defaults to /mcp
+
+bun run start:http
+```
+
+Or use environment variables directly:
+
+```bash
+MCP_TRANSPORT=http \
+MCP_BEARER_TOKEN=your-secret-token \
+MCP_PORT=3000 \
+OUTLINE_BASE_URL=https://your-instance.getoutline.com \
+OUTLINE_API_KEY=ol_api_xxx \
+node dist/index.js
+```
+
+3. **Configure your MCP client:**
+
+- **Endpoint:** `http://localhost:3000/mcp`
+- **Authentication:** Bearer token authentication
+- **Header:** `Authorization: Bearer your-secret-token`
+
+**Environment Variables:**
+
+| Variable           | Required | Default | Description                             |
+| ------------------ | -------- | ------- | --------------------------------------- |
+| `MCP_TRANSPORT`    | No       | `stdio` | Transport mode: `stdio` or `http`/`sse` |
+| `MCP_BEARER_TOKEN` | Yes\*    | -       | Bearer token for HTTP authentication    |
+| `MCP_PORT`         | No       | `3000`  | HTTP server port                        |
+| `MCP_PATH`         | No       | `/mcp`  | HTTP endpoint path                      |
+| `OUTLINE_BASE_URL` | Yes      | -       | Your Outline instance URL               |
+| `OUTLINE_API_KEY`  | Yes      | -       | Your Outline API key                    |
+
+\*Required only when using HTTP transport mode.
+
+**Health Check:**
+
+The HTTP server provides a health check endpoint at `/health` (no authentication required):
+
+```bash
+curl http://localhost:3000/health
+# Response: {"status":"ok"}
 ```
 
 Get your API key from Outline > **Settings** > **API** > **Create API Key**.
