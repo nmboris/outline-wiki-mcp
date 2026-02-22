@@ -5,13 +5,13 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json ./
 COPY bun.lock* ./
-RUN bun install --frozen-lockfile --production
+RUN bun install --frozen-lockfile --production --ignore-scripts
 
 # Build stage
 FROM base AS builder
 COPY package.json ./
 COPY bun.lock* ./
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --ignore-scripts
 COPY . .
 RUN bun run build
 
