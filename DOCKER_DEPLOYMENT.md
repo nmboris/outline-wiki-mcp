@@ -11,7 +11,7 @@ Coolify.
 # 1. Copy environment template
 cp .env.docker .env
 
-# 2. Edit .env with your Outline instance URL
+# 2. Edit .env with your Outline instance URL...
 nano .env
 
 # 3. Build and run
