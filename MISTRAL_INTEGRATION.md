@@ -18,47 +18,58 @@ You can deploy the server anywhere that Mistral.ai can reach via HTTP. Options i
 - Cloud hosting (AWS, Google Cloud, Azure, etc.)
 - Platform-as-a-Service (Railway, Render, Fly.io, etc.)
 
-### 2. Start the Server
+### 2. Configure Environment Variables
+
+Create a `.env` file:
 
 ```bash
-# Set your Outline credentials
-export OUTLINE_BASE_URL="https://your-instance.getoutline.com"
-export OUTLINE_API_KEY="ol_api_xxx"
+cp .env.example .env
+```
 
-# Set HTTP transport configuration
-export MCP_TRANSPORT="http"
-export MCP_BEARER_TOKEN="your-secure-random-token"
-export MCP_PORT="3000"
+Edit `.env` - only the base URL is needed:
 
-# Build and start
+```env
+OUTLINE_BASE_URL=https://your-instance.getoutline.com
+MCP_TRANSPORT=http
+MCP_PORT=3000
+MCP_PATH=/mcp
+```
+
+**Important:** Do NOT set `OUTLINE_API_KEY` in the .env file for HTTP mode. Each user will provide their own API key via
+the Bearer token.
+
+### 3. Build and Start the Server
+
+```bash
 bun install
 bun run build
 bun run start:http
 ```
 
-**Security Note:** Generate a strong random token for `MCP_BEARER_TOKEN`:
+Bun automatically loads your `.env` file - no extra configuration needed!
 
-```bash
-# Generate a secure token
-openssl rand -hex 32
-```
+### 4. Configure Mistral.ai Connector
 
-### 3. Configure Mistral.ai Connector
+**Each user** configures the connector in their Mistral.ai account:
 
-In your Mistral.ai dashboard:
-
-1. Navigate to **Connectors** settings
+1. Navigate to **Connectors** or **Settings** in Mistral.ai
 2. Click **Add New Connector**
 3. Select **MCP (Model Context Protocol)** as the connector type
 4. Configure the connection:
    - **Name:** Outline Wiki
-   - **Endpoint URL:** `https://your-domain.com/mcp` (or `http://localhost:3000/mcp` for testing)
+   - **Endpoint URL:** `https://your-domain.com/mcp` (your deployed server)
    - **Authentication Type:** Bearer Token
-   - **Token:** Your `MCP_BEARER_TOKEN` value
+   - **Token:** Your personal Outline API key
 
-5. Save and test the connection
+5. Get your Outline API key:
+   - Go to your Outline workspace
+   - Navigate to **Settings** → **API**
+   - Click **Create API Key**
+   - Copy the key (starts with `ol_api_`)
 
-### 4. Test the Integration
+6. Save and test the connection
+
+### 5. Test the Integration
 
 Once configured, Mistral.ai agents can use natural language to:
 
@@ -136,11 +147,11 @@ Create `.env` file (never commit this!):
 
 ```env
 OUTLINE_BASE_URL=https://your-instance.getoutline.com
-OUTLINE_API_KEY=ol_api_xxx
 MCP_TRANSPORT=http
-MCP_BEARER_TOKEN=your-secure-random-token
 MCP_PORT=3000
 ```
+
+**Note:** No OUTLINE_API_KEY or MCP_BEARER_TOKEN needed here - users provide their tokens!
 
 ### Reverse Proxy / HTTPS
 

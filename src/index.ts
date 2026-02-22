@@ -17,12 +17,32 @@ const packageJson = JSON.parse(
 ) as { name: string; version: string };
 
 async function main(): Promise<void> {
-  // Load configuration
-  const configPath = getConfigPath();
-  const config = loadConfig(configPath);
+  // Determine transport mode from environment
+  const transportMode = process.env.MCP_TRANSPORT || 'stdio';
 
-  // Create Outline API client
-  const client = new OutlineClient(config);
+  let config: any;
+  let client: OutlineClient;
+
+  if (transportMode === 'http' || transportMode === 'sse') {
+    // HTTP SSE transport mode - Multi-tenant support
+    // Each request provides its own Outline API key via Bearer token
+
+    const outlineBaseUrl = process.env.OUTLINE_BASE_URL;
+    if (!outlineBaseUrl) {
+      throw new Error('OUTLINE_BASE_URL environment variable is required');
+    }
+
+    // Create a dummy client for registration (will be replaced per-request)
+    client = new OutlineClient({
+      baseUrl: outlineBaseUrl,
+      apiKey: 'placeholder', // Will be replaced by request-specific token
+    });
+  } else {
+    // stdio mode - Single tenant with static API key
+    const configPath = getConfigPath();
+    config = loadConfig(configPath);
+    client = new OutlineClient(config);
+  }
 
   // Create MCP server
   const server = new McpServer({
@@ -34,22 +54,22 @@ async function main(): Promise<void> {
   registerTools(server, client);
   registerResources(server, client);
 
-  // Determine transport mode from environment
-  const transportMode = process.env.MCP_TRANSPORT || 'stdio';
-
   if (transportMode === 'http' || transportMode === 'sse') {
     // HTTP SSE transport mode
     const port = parseInt(process.env.MCP_PORT || '3000', 10);
+    const requireAuth = process.env.MCP_REQUIRE_AUTH === 'true';
     const bearerToken = process.env.MCP_BEARER_TOKEN;
 
-    if (!bearerToken) {
+    if (requireAuth && !bearerToken) {
       throw new Error(
-        'MCP_BEARER_TOKEN environment variable is required for HTTP transport mode'
+        'MCP_BEARER_TOKEN environment variable is required when MCP_REQUIRE_AUTH=true'
       );
     }
 
     const transport = new HttpSseTransport({
       port,
+      outlineBaseUrl: process.env.OUTLINE_BASE_URL!,
+      requireAuth,
       bearerToken,
       path: process.env.MCP_PATH || '/mcp',
     });
@@ -57,8 +77,11 @@ async function main(): Promise<void> {
     await transport.start();
     await server.connect(transport);
 
-    console.log(`MCP Server running in HTTP SSE mode`);
-    console.log(`Authenticate with: Authorization: Bearer ${bearerToken}`);
+    console.log(`MCP Server running in HTTP SSE mode (Multi-Tenant)`);
+    console.log(`Each request's Bearer token is the user's Outline API key`);
+    if (requireAuth) {
+      console.log(`Additional MCP authentication enabled`);
+    }
   } else {
     // Default: stdio transport
     const transport = new StdioServerTransport();

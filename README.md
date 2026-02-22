@@ -18,6 +18,8 @@ interface.
 - **Markdown Export** - Export documents as clean markdown
 - **MCP Resources** - Browse collections and documents via resource URIs
 - **HTTP SSE Transport** - Access via HTTP with Server-Sent Events for Mistral.ai and other platforms
+- **Multi-Tenant Support** - Each user provides their own Outline API key
+- **Docker Ready** - Easy deployment with Docker and docker-compose for Coolify
 
 ## Setup
 
@@ -42,7 +44,9 @@ For use with Claude Desktop or other MCP clients:
 
 ### HTTP SSE Setup (for Mistral.ai and others)
 
-For use with Mistral.ai connectors or other HTTP-based MCP clients:
+For use with Mistral.ai connectors or other HTTP-based MCP clients.
+
+**Multi-Tenant Mode:** Each Mistral.ai user provides their own Outline API key as the Bearer token.
 
 1. **Build the project:**
 
@@ -51,48 +55,46 @@ bun install
 bun run build
 ```
 
-2. **Start the HTTP server:**
+2. **Configure environment variables:**
+
+Create a `.env` file:
+
+```env
+OUTLINE_BASE_URL=https://your-instance.getoutline.com
+MCP_TRANSPORT=http
+MCP_PORT=3000
+MCP_PATH=/mcp
+```
+
+**Note:** `OUTLINE_API_KEY` is NOT needed in HTTP mode - each user provides their own API key!
+
+3. **Start the HTTP server:**
 
 ```bash
-export OUTLINE_BASE_URL="https://your-instance.getoutline.com"
-export OUTLINE_API_KEY="ol_api_xxx"
-export MCP_TRANSPORT="http"
-export MCP_BEARER_TOKEN="your-secret-token"
-export MCP_PORT="3000"  # Optional, defaults to 3000
-export MCP_PATH="/mcp"  # Optional, defaults to /mcp
-
+# Bun automatically loads .env file
 bun run start:http
 ```
 
-Or use environment variables directly:
+4. **Configure Mistral.ai:**
 
-```bash
-MCP_TRANSPORT=http \
-MCP_BEARER_TOKEN=your-secret-token \
-MCP_PORT=3000 \
-OUTLINE_BASE_URL=https://your-instance.getoutline.com \
-OUTLINE_API_KEY=ol_api_xxx \
-node dist/index.js
-```
+Each user configures the connector in Mistral.ai with:
 
-3. **Configure your MCP client:**
+- **Endpoint:** `https://your-domain.com/mcp`
+- **Authentication:** Bearer Token
+- **Token:** Their personal Outline API key (from Outline Settings → API)
 
-- **Endpoint:** `http://localhost:3000/mcp`
-- **Authentication:** Bearer token authentication
-- **Header:** `Authorization: Bearer your-secret-token`
+**Environment Variables (HTTP Mode):**
 
-**Environment Variables:**
+| Variable           | Required | Default | Description                                 |
+| ------------------ | -------- | ------- | ------------------------------------------- |
+| `OUTLINE_BASE_URL` | Yes      | -       | Your Outline instance URL                   |
+| `MCP_TRANSPORT`    | Yes      | `stdio` | Set to `http` for HTTP mode                 |
+| `MCP_PORT`         | No       | `3000`  | HTTP server port                            |
+| `MCP_PATH`         | No       | `/mcp`  | HTTP endpoint path                          |
+| `MCP_REQUIRE_AUTH` | No       | `false` | Enable additional MCP-level auth            |
+| `MCP_BEARER_TOKEN` | No\*     | -       | MCP access token (if MCP_REQUIRE_AUTH=true) |
 
-| Variable           | Required | Default | Description                             |
-| ------------------ | -------- | ------- | --------------------------------------- |
-| `MCP_TRANSPORT`    | No       | `stdio` | Transport mode: `stdio` or `http`/`sse` |
-| `MCP_BEARER_TOKEN` | Yes\*    | -       | Bearer token for HTTP authentication    |
-| `MCP_PORT`         | No       | `3000`  | HTTP server port                        |
-| `MCP_PATH`         | No       | `/mcp`  | HTTP endpoint path                      |
-| `OUTLINE_BASE_URL` | Yes      | -       | Your Outline instance URL               |
-| `OUTLINE_API_KEY`  | Yes      | -       | Your Outline API key                    |
-
-\*Required only when using HTTP transport mode.
+\*Only required when `MCP_REQUIRE_AUTH=true`
 
 **Health Check:**
 
@@ -146,11 +148,11 @@ Browse your wiki structure using resource URIs:
 ## Development
 
 ```bash
-pnpm install        # Install dependencies
-pnpm build          # Compile TypeScript
-pnpm dev            # Watch mode
-pnpm test           # Run tests
-pnpm lint           # Type-check
+bun install         # Install dependencies
+bun run build       # Compile TypeScript
+bun run dev         # Watch mode
+bun run test        # Run tests
+bun run lint        # Type-check
 ```
 
 ### Local Testing
@@ -158,13 +160,18 @@ pnpm lint           # Type-check
 ```bash
 OUTLINE_BASE_URL=https://your-instance.getoutline.com \
 OUTLINE_API_KEY=ol_api_xxx \
-node dist/index.js
+bun dist/index.js
 ```
 
 ## Contributing
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing guidelines, and commit
 conventions.
+
+## Deployment
+
+- **Docker**: See [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) for Docker and Coolify setup
+- **Mistral.ai**: See [MISTRAL_INTEGRATION.md](MISTRAL_INTEGRATION.md) for Mistral.ai integration
 
 ## License
 

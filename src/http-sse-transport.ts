@@ -7,10 +7,13 @@ import {
   JSONRPCResponse,
   JSONRPCNotification,
 } from '@modelcontextprotocol/sdk/types.js';
+import { setRequestContext } from './request-context.js';
 
 export interface HttpSseTransportOptions {
   port: number;
-  bearerToken: string;
+  outlineBaseUrl: string;
+  requireAuth?: boolean; // Optional: require MCP_BEARER_TOKEN for additional security
+  bearerToken?: string; // Optional: static auth token for MCP access control
   path?: string;
 }
 
@@ -23,8 +26,10 @@ export class HttpSseTransport implements Transport {
   private app: express.Application;
   private server: any;
   private clients: Map<string, Response> = new Map();
-  private pendingRequests: Map<string, (response: JSONRPCResponse) => void> =
-    new Map();
+  private pendingRequests: Map<
+    string | number,
+    (response: JSONRPCResponse) => void
+  > = new Map();
   private options: HttpSseTransportOptions;
   public onclose?: () => void;
   public onerror?: (error: Error) => void;
@@ -63,10 +68,18 @@ export class HttpSseTransport implements Transport {
       }
 
       const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-      if (token !== this.options.bearerToken) {
-        res.status(403).json({ error: 'Invalid token' });
-        return;
+
+      // Optional: Check against static MCP auth token for additional security
+      if (this.options.requireAuth && this.options.bearerToken) {
+        if (token !== this.options.bearerToken) {
+          res.status(403).json({ error: 'Invalid MCP token' });
+          return;
+        }
       }
+
+      // Store the bearer token in request for later use
+      // In multi-tenant mode, this token is the user's Outline API key
+      (req as any).outlineApiKey = token;
 
       next();
     });
@@ -109,7 +122,7 @@ export class HttpSseTransport implements Transport {
     });
 
     // POST endpoint for receiving messages from client
-    this.app.post(this.options.path!, (req: Request, res: Response) => {
+    this.app.post(this.options.path!, async (req: Request, res: Response) => {
       try {
         const message = req.body as JSONRPCMessage;
 
@@ -118,12 +131,57 @@ export class HttpSseTransport implements Transport {
           return;
         }
 
-        // Handle message through onmessage callback
-        if (this.onmessage) {
-          this.onmessage(message);
-        }
+        // Extract Outline API key from request (stored by auth middleware)
+        const outlineApiKey = (req as any).outlineApiKey;
 
-        res.status(202).json({ received: true });
+        // Store request context for multi-tenant support
+        // The Bearer token from Mistral.ai is the user's Outline API key
+        if (
+          'id' in message &&
+          message.id !== null &&
+          message.id !== undefined
+        ) {
+          const requestId = message.id; // Type narrowing
+          setRequestContext(requestId, {
+            outlineApiKey,
+            outlineBaseUrl: this.options.outlineBaseUrl,
+          });
+
+          // Setup promise to wait for response
+          const responsePromise = new Promise<JSONRPCResponse>(resolve => {
+            this.pendingRequests.set(requestId, resolve);
+          });
+
+          // Handle message through onmessage callback
+          if (this.onmessage) {
+            this.onmessage(message);
+          }
+
+          // Wait for response with timeout
+          const timeout = setTimeout(() => {
+            this.pendingRequests.delete(requestId);
+            res.status(504).json({
+              jsonrpc: '2.0',
+              id: requestId,
+              error: { code: -32000, message: 'Request timeout' },
+            });
+          }, 30000); // 30 second timeout
+
+          try {
+            const response = await responsePromise;
+            clearTimeout(timeout);
+            res.status(200).json(response);
+          } catch (error) {
+            clearTimeout(timeout);
+            throw error;
+          }
+        } else {
+          // Notification (no response expected)
+          if (this.onmessage) {
+            this.onmessage(message);
+          }
+          res.status(202).json({ received: true });
+        }
       } catch (error) {
         console.error('Error processing message:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -164,11 +222,24 @@ export class HttpSseTransport implements Transport {
   }
 
   /**
-   * Send a JSON-RPC message to all connected clients
+   * Send a JSON-RPC message
+   * In synchronous mode: resolves pending request promises
+   * In SSE mode: sends to all connected clients
    */
   async send(message: JSONRPCMessage): Promise<void> {
-    const messageStr = JSON.stringify(message);
+    // If this is a response to a pending request, resolve it
+    if ('id' in message && message.id !== null && message.id !== undefined) {
+      const messageId = message.id; // Type narrowing
+      if (this.pendingRequests.has(messageId)) {
+        const resolve = this.pendingRequests.get(messageId)!;
+        this.pendingRequests.delete(messageId);
+        resolve(message as JSONRPCResponse);
+        return;
+      }
+    }
 
+    // Otherwise, send via SSE to all connected clients
+    const messageStr = JSON.stringify(message);
     for (const [clientId, client] of this.clients.entries()) {
       try {
         client.write(`data: ${messageStr}\n\n`);
